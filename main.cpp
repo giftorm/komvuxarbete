@@ -3,8 +3,12 @@
 #endif
 
 #include <windows.h>
+#include <stdint.h>
 
+static BITMAPINFO wBitmapInfo;
 static void* wBitmapMemory;
+static int wBitmapWidth;
+static int wBitmapHeight;
 
 static void wAllocateDIBSection(int width, int height) {
     // We need to free the memory and give it back to the operating system
@@ -12,12 +16,56 @@ static void wAllocateDIBSection(int width, int height) {
     if (wBitmapMemory) {
         VirtualFree(wBitmapMemory, 0, MEM_RELEASE);
     }
+
+    wBitmapWidth = width;
+    wBitmapHeight = height;
+
+    wBitmapInfo.bmiHeader.biSize = sizeof(wBitmapInfo.bmiHeader);
+    wBitmapInfo.bmiHeader.biWidth = wBitmapWidth;
+    wBitmapInfo.bmiHeader.biHeight = -wBitmapHeight;
+    wBitmapInfo.bmiHeader.biPlanes = 1;
+    wBitmapInfo.bmiHeader.biBitCount = 32;
+    wBitmapInfo.bmiHeader.biCompression = BI_RGB;
+
     // Calculate back buffer size
-    int BytesPerPixel = 4;
-    int BitmapMemorySize = (width * height) * BytesPerPixel;
+    int bytesPerPixel = 4;
+    int bitmapMemorySize = (wBitmapWidth * wBitmapHeight) * bytesPerPixel;
 
     // Allocate back buffer memory manually
-    wBitmapMemory = VirtualAlloc(NULL, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    wBitmapMemory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+
+    // Write pixels
+    int pitch = wBitmapWidth * bytesPerPixel;
+    uint8_t *row = (uint8_t *)wBitmapMemory;
+
+    for (int y = 0; y < wBitmapHeight; ++y) {
+        uint8_t* pixel = (uint8_t *)row;
+        for (int x = 0; x < wBitmapWidth; ++x) {
+            *pixel = 255;
+            ++pixel;
+            *pixel = 0;
+            ++pixel;
+            *pixel = 0;
+            ++pixel;
+            *pixel = 0;
+            ++pixel;
+        }
+        row += pitch;
+     }
+}
+
+static void wUpdate(HDC hdc, RECT *wRect, int x, int y, int width, int height) {
+    int wWidth = wRect->right - wRect->left;
+    int wHeight = wRect->bottom - wRect->top;
+    StretchDIBits(
+        hdc,
+        0, 0, wBitmapWidth, wBitmapHeight,
+        0, 0, wWidth, wHeight,
+        wBitmapMemory,
+        &wBitmapInfo,
+        DIB_RGB_COLORS,
+        SRCCOPY
+    );
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -88,13 +136,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_PAINT:
-    {
+        {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
 
             // All painting occurs here, between BeginPaint and EndPaint.
 
-            FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
+            int x = ps.rcPaint.left;
+            int y = ps.rcPaint.top;
+            int width = ps.rcPaint.right - ps.rcPaint.left;
+            int height = ps.rcPaint.bottom - ps.rcPaint.top;
+
+            RECT rect;
+            GetClientRect(hwnd, &rect);
+
+            wUpdate(hdc, &rect, x, y, width, height);
 
             EndPaint(hwnd, &ps);
         }
