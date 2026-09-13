@@ -4,6 +4,22 @@
 
 #include <windows.h>
 
+static void* wBitmapMemory;
+
+static void wAllocateDIBSection(int width, int height) {
+    // We need to free the memory and give it back to the operating system
+    // In this case we'll release it before we re-allocate with VirtualAlloc
+    if (wBitmapMemory) {
+        VirtualFree(wBitmapMemory, 0, MEM_RELEASE);
+    }
+    // Calculate back buffer size
+    int BytesPerPixel = 4;
+    int BitmapMemorySize = (width * height) * BytesPerPixel;
+
+    // Allocate back buffer memory manually
+    wBitmapMemory = VirtualAlloc(NULL, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+}
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
@@ -59,12 +75,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
+    case WM_SIZE:
+        RECT cRect;
+        GetClientRect(hwnd, &cRect);
+        wAllocateDIBSection(
+            cRect.right - cRect.left,
+            cRect.bottom - cRect.top
+        );
+        break;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
 
     case WM_PAINT:
-        {
+    {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
 
