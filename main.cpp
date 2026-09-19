@@ -9,6 +9,32 @@ static BITMAPINFO wBitmapInfo;
 static void* wBitmapMemory;
 static int wBitmapWidth;
 static int wBitmapHeight;
+static int bytesPerPixel = 4;
+
+static void cWholeArea() {
+    int pitch = wBitmapWidth * bytesPerPixel;
+    uint8_t* row = (uint8_t*)wBitmapMemory;
+
+    for (int y = 0; y < wBitmapHeight; ++y) {
+        uint32_t* pixel = (uint32_t*)row;
+        for (int x = 0; x < wBitmapWidth; ++x) {
+            *pixel++ = 0x0000FF00;
+        }
+        row += pitch;
+    }
+}
+
+static void cSquare(int y0, int x0, int size) {
+    int pitch = wBitmapWidth * bytesPerPixel;
+
+    for (int y = y0; y < y0 + size; ++y) {
+        uint8_t* row = (uint8_t*)wBitmapMemory + (pitch * y);
+        uint32_t* pixel = (uint32_t*)row + x0;
+        for (int x = x0; x < x0 + size; ++x) {
+            *pixel++ = 0x0000FF00;
+        }
+    }
+}
 
 static void wAllocateDIBSection(int width, int height) {
     // We need to free the memory and give it back to the operating system
@@ -28,56 +54,22 @@ static void wAllocateDIBSection(int width, int height) {
     wBitmapInfo.bmiHeader.biCompression = BI_RGB;
 
     // Calculate back buffer size
-    int bytesPerPixel = 4;
     int bitmapMemorySize = (wBitmapWidth * wBitmapHeight) * bytesPerPixel;
 
     // Allocate back buffer memory manually
     wBitmapMemory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-
-    // Write pixels
-    int pitch = wBitmapWidth * bytesPerPixel;
-    uint8_t *row = (uint8_t *)wBitmapMemory;
-
-    for (int y = 0; y < wBitmapHeight; ++y) {
-        uint8_t* pixel = (uint8_t *)row;
-        for (int x = 0; x < wBitmapWidth; ++x) {
-            *pixel = 255;
-            ++pixel;
-            *pixel = 0;
-            ++pixel;
-            *pixel = 0;
-            ++pixel;
-            *pixel = 0;
-            ++pixel;
-        }
-        row += pitch;
-     }
 }
 
-static void wUpdate(HDC hdc, RECT *wRect, int x, int y, int width, int height) {
-    int wWidth = wRect->right - wRect->left;
-    int wHeight = wRect->bottom - wRect->top;
-    StretchDIBits(
-        hdc,
-        0, 0, wBitmapWidth, wBitmapHeight,
-        0, 0, wWidth, wHeight,
-        wBitmapMemory,
-        &wBitmapInfo,
-        DIB_RGB_COLORS,
-        SRCCOPY
-    );
-}
-
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK wProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
     // Register the window class.
-    const wchar_t CLASS_NAME[]  = L"Sample Window Class";
+    const wchar_t CLASS_NAME[]  = L"mjukvarurasteriserare";
 
     WNDCLASS wc = {};
 
-    wc.lpfnWndProc   = WindowProc;
+    wc.lpfnWndProc   = wProc;
     wc.hInstance     = hInstance;
     wc.lpszClassName = CLASS_NAME;
 
@@ -88,11 +80,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     HWND hwnd = CreateWindowEx(
         0,                              // Optional window styles.
         CLASS_NAME,                     // Window class
-        L"Learn to Program Windows",    // Window text
+        CLASS_NAME,                     // Window text
         WS_OVERLAPPEDWINDOW,            // Window style
 
         // Size and position
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        CW_USEDEFAULT, CW_USEDEFAULT, 800, 400,
 
         NULL,       // Parent window
         NULL,       // Menu
@@ -119,7 +111,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     return 0;
 }
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK wProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -150,7 +142,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             RECT rect;
             GetClientRect(hwnd, &rect);
 
-            wUpdate(hdc, &rect, x, y, width, height);
+            cSquare(100, 100, 100);
+            int wWidth = rect.right - rect.left;
+            int wHeight = rect.bottom - rect.top;
+            StretchDIBits(
+                hdc,
+                0, 0, wBitmapWidth, wBitmapHeight,
+                0, 0, wWidth, wHeight,
+                wBitmapMemory,
+                &wBitmapInfo,
+                DIB_RGB_COLORS,
+                SRCCOPY
+            );
 
             EndPaint(hwnd, &ps);
         }
