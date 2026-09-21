@@ -114,7 +114,7 @@ Referens: https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-libr
 
 ## 2026-09-07 Allokera byte buffert
 
-Commit: 4edbd7a
+Commit: 250081a
 
 Allokera en byte buffert, sekvens av bytes, för att "rita" till.
 
@@ -130,7 +130,7 @@ static void wAllocateDIBSection(int width, int height) {
     wBitmapMemory = VirtualAlloc(NULL, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 }
 ```
-*figur 5:*
+*figur 5:* C++ kod för att allokera en byte buffert
 
 Minnet allokeras globalt i programmet för att göras tillgängligt för återallokering samt för framtida rendering.
 Vid skapandet av en minnesbuffert används VirtualAlloc. Den funktionen allokerar minne och storleken bestäms
@@ -141,3 +141,56 @@ mängden ogenomskinlighet.
 Referens:
 - https://en.wikipedia.org/wiki/RGBA_color_model
 - https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc
+
+
+## 2026-09-07 Rendera byte bufferten i fönstret
+
+Commit: 573bd18
+
+Uppdatera innehållet i bufferten och rendera i skärmen
+
+```c++
+static void wUpdate(HDC hdc, RECT *wRect, int x, int y, int width, int height) {
+    int wWidth = wRect->right - wRect->left;
+    int wHeight = wRect->bottom - wRect->top;
+    StretchDIBits(
+        hdc,
+        0, 0, wBitmapWidth, wBitmapHeight,
+        0, 0, wWidth, wHeight,
+        wBitmapMemory,
+        &wBitmapInfo,
+        DIB_RGB_COLORS,
+        SRCCOPY
+    );
+}
+```
+*figur 6: metod som kopierar en rektangel av pixlar från minnesbufferten till fönstret*
+För att rendera pixlar skärmen behöver man utföra en "bit-block transfer", som innebär att kopiera en rektangel med pixlar från en källa till en annan. När fönstret skapas allokeras i programmet en bytebuffer, se figur 5. Efter allokering loopar vi över alla pixlar och sätter RGB, red, green and blue primary colors, värden för den färgen som pixeln ska ha. En pixel representeras av 4 bytes, en för varje färg (röd, grön och blå), men en extra byte för padding. Efteråt anropas metoden i figur 6 där minnesbufferten kopieras över till enhetskontexten som hålls av HDC variabeln och renderas på skärmen.
+
+Referens:
+ - https://en.wikipedia.org/wiki/RGB_color_model
+
+
+##  2026-09-07 Rita en fyrkant
+
+Commit: 1f43a2f
+
+Rita ett fyrkant i fönstret
+
+```c++
+static void cSquare(int y0, int x0, int size) {
+    int pitch = wBitmapWidth * bytesPerPixel;
+
+    for (int y = y0; y < y0 + size; ++y) {
+        uint8_t* row = (uint8_t*)wBitmapMemory + (pitch * y);
+        uint32_t* pixel = (uint32_t*)row + x0;
+        for (int x = x0; x < x0 + size; ++x) {
+            *pixel = 0x0000FF00;
+            pixel++;
+        }
+        row += pitch;
+    }
+}
+```
+
+Att rita en ruta i en bytearray görs genom att loopa över den delen av bytebufferten som är inom arean angiven av vilken punkt som det börjas rita från x och y punkten och ritar alla pixlar som är inom storleken plus startpunkt i både stående och liggande riktning.
